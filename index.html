@@ -1,0 +1,270 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>NOVA — Assistente IA</title>
+<style>
+  :root{
+    --bg-deep:#050810;
+    --bg-panel:#0B1220;
+    --signal:#4FE8C6;
+    --signal-2:#8B7CFF;
+    --signal-warm:#FF7A59;
+    --text-hi:#EAF2F1;
+    --text-lo:#8A9AA6;
+  }
+  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
+  html,body{height:100%; margin:0; overscroll-behavior:none;}
+  body{
+    background:radial-gradient(ellipse at 50% 20%, #0E1830 0%, var(--bg-deep) 55%, #020306 100%);
+    font-family:'Segoe UI', -apple-system, sans-serif;
+    color:var(--text-hi);
+    display:flex; flex-direction:column; align-items:center;
+    min-height:100vh; padding:env(safe-area-inset-top) 0 env(safe-area-inset-bottom) 0;
+    overflow:hidden;
+  }
+  .brand{
+    margin-top:18px; font-size:13px; letter-spacing:.35em; font-weight:600;
+    color:var(--text-lo); text-transform:uppercase;
+  }
+  .brand b{color:var(--signal); font-weight:700;}
+
+  .stage{ position:relative; width:min(78vw,320px); height:min(78vw,320px); margin:22px 0 6px; }
+  canvas{ width:100%; height:100%; display:block; }
+
+  .status{
+    font-size:12px; letter-spacing:.18em; text-transform:uppercase;
+    color:var(--text-lo); min-height:18px; font-weight:600;
+  }
+  .status.on{color:var(--signal);}
+
+  .log{
+    width:88%; max-width:480px; flex:1; overflow-y:auto;
+    margin-top:14px; padding:6px 4px 100px;
+    display:flex; flex-direction:column; gap:12px;
+  }
+  .bubble{
+    max-width:86%; padding:11px 15px; border-radius:16px; font-size:14.5px; line-height:1.45;
+    animation:rise .25s ease;
+  }
+  @keyframes rise{ from{opacity:0; transform:translateY(6px);} to{opacity:1; transform:translateY(0);} }
+  .me{ align-self:flex-end; background:linear-gradient(135deg,var(--signal-2),#6a5cd8); color:#fff; border-bottom-right-radius:4px;}
+  .ai{ align-self:flex-start; background:var(--bg-panel); border:1px solid #1c2740; color:var(--text-hi); border-bottom-left-radius:4px;}
+  .empty{ color:var(--text-lo); font-size:13.5px; text-align:center; margin-top:30px; line-height:1.6; padding:0 12px;}
+
+  .dock{
+    position:fixed; bottom:0; left:0; right:0;
+    display:flex; align-items:center; gap:10px;
+    padding:14px 16px calc(16px + env(safe-area-inset-bottom));
+    background:linear-gradient(0deg, var(--bg-deep) 55%, transparent);
+  }
+  .textbox{
+    flex:1; background:var(--bg-panel); border:1px solid #1c2740; border-radius:22px;
+    padding:12px 16px; color:var(--text-hi); font-size:14.5px; outline:none;
+  }
+  .textbox::placeholder{color:var(--text-lo);}
+  .mic{
+    width:52px; height:52px; border-radius:50%; border:none; flex-shrink:0;
+    background:linear-gradient(135deg,var(--signal),#2bc7a3);
+    display:flex; align-items:center; justify-content:center;
+    box-shadow:0 0 0 0 rgba(79,232,198,.5);
+    transition:transform .15s ease;
+  }
+  .mic.listening{ background:linear-gradient(135deg,var(--signal-warm),#e04b2a); animation:pulse 1.4s infinite; }
+  @keyframes pulse{ 0%{box-shadow:0 0 0 0 rgba(255,122,89,.55);} 70%{box-shadow:0 0 0 16px rgba(255,122,89,0);} 100%{box-shadow:0 0 0 0 rgba(255,122,89,0);} }
+  .mic:active{ transform:scale(.92); }
+  .mic svg{ width:22px; height:22px; }
+
+  .hint{ font-size:11px; color:var(--text-lo); margin-top:2px; text-align:center; padding:0 20px;}
+</style>
+</head>
+<body>
+
+  <div class="brand">N O V A · <b>IA</b></div>
+
+  <div class="stage"><canvas id="orb"></canvas></div>
+  <div class="status" id="status">toque no microfone e fale</div>
+
+  <div class="log" id="log">
+    <div class="empty" id="emptyMsg">Sua assistente pessoal.<br>Pergunte qualquer coisa, por voz ou texto.</div>
+  </div>
+
+  <div class="dock">
+    <input class="textbox" id="textInput" placeholder="Escreva ou toque no microfone…" />
+    <button class="mic" id="micBtn" aria-label="Falar">
+      <svg viewBox="0 0 24 24" fill="none" stroke="#02110c" stroke-width="2.2" stroke-linecap="round">
+        <path d="M12 15a3 3 0 0 0 3-3V6a3 3 0 0 0-6 0v6a3 3 0 0 0 3 3z"/>
+        <path d="M19 11a7 7 0 0 1-14 0"/>
+        <line x1="12" y1="19" x2="12" y2="22"/>
+      </svg>
+    </button>
+  </div>
+
+<script>
+// ---------- ORB VISUAL ----------
+const canvas = document.getElementById('orb');
+const ctx = canvas.getContext('2d');
+let dpr = Math.min(window.devicePixelRatio||1, 2);
+function resize(){
+  const r = canvas.getBoundingClientRect();
+  canvas.width = r.width*dpr; canvas.height = r.height*dpr;
+}
+window.addEventListener('resize', resize);
+resize();
+
+let state = 'idle'; // idle | listening | thinking | speaking
+let t = 0;
+const colors = { idle:'#4FE8C6', listening:'#FF7A59', thinking:'#8B7CFF', speaking:'#4FE8C6' };
+
+function draw(){
+  t += 0.016;
+  const w = canvas.width, h = canvas.height;
+  ctx.clearRect(0,0,w,h);
+  const cx=w/2, cy=h/2;
+  const baseR = Math.min(w,h)*0.28;
+  const energy = state==='listening'?1.4 : state==='thinking'?0.7 : state==='speaking'?1.1 : 0.4;
+  const speed = state==='thinking'?2.2:1;
+  const col = colors[state];
+
+  // glow
+  const glow = ctx.createRadialGradient(cx,cy,baseR*0.2,cx,cy,baseR*2.2);
+  glow.addColorStop(0, col+'55');
+  glow.addColorStop(1, 'transparent');
+  ctx.fillStyle = glow;
+  ctx.beginPath(); ctx.arc(cx,cy,baseR*2.2,0,7); ctx.fill();
+
+  // rings of dots forming sphere wireframe
+  const rings = 14;
+  for(let i=0;i<rings;i++){
+    const phase = (i/rings)*Math.PI;
+    const ringR = Math.sin(phase)*baseR;
+    const yOff = Math.cos(phase)*baseR*0.9;
+    const wobble = Math.sin(t*speed + i)*baseR*0.04*energy;
+    const pts = 26;
+    ctx.beginPath();
+    for(let p=0;p<=pts;p++){
+      const a = (p/pts)*Math.PI*2 + t*0.3*speed*(i%2===0?1:-1);
+      const x = cx + Math.cos(a)*(ringR+wobble);
+      const y = cy + yOff + Math.sin(a)*(ringR+wobble)*0.32;
+      p===0?ctx.moveTo(x,y):ctx.lineTo(x,y);
+    }
+    ctx.closePath();
+    ctx.strokeStyle = col + (state==='thinking'?'99':'66');
+    ctx.lineWidth = 1.1*dpr;
+    ctx.stroke();
+  }
+
+  // core
+  const core = ctx.createRadialGradient(cx,cy,0,cx,cy,baseR*0.55);
+  core.addColorStop(0, col+'ee');
+  core.addColorStop(1, col+'11');
+  ctx.fillStyle = core;
+  ctx.beginPath(); ctx.arc(cx,cy,baseR*0.5*(0.85+0.15*Math.sin(t*3*energy)),0,7); ctx.fill();
+
+  requestAnimationFrame(draw);
+}
+draw();
+
+function setState(s){
+  state = s;
+  const statusEl = document.getElementById('status');
+  const micBtn = document.getElementById('micBtn');
+  micBtn.classList.toggle('listening', s==='listening');
+  const labels = { idle:'toque no microfone e fale', listening:'ouvindo…', thinking:'pensando…', speaking:'respondendo…' };
+  statusEl.textContent = labels[s];
+  statusEl.classList.toggle('on', s!=='idle');
+}
+
+// ---------- CHAT LOG ----------
+const log = document.getElementById('log');
+const emptyMsg = document.getElementById('emptyMsg');
+const history = []; // {role, content}
+
+function addBubble(text, who){
+  emptyMsg.style.display = 'none';
+  const b = document.createElement('div');
+  b.className = 'bubble ' + (who==='user'?'me':'ai');
+  b.textContent = text;
+  log.appendChild(b);
+  log.scrollTop = log.scrollHeight;
+}
+
+// ---------- CLAUDE CALL ----------
+async function askNova(userText){
+  history.push({role:'user', content:userText});
+  setState('thinking');
+  try{
+    const res = await fetch('https://api.anthropic.com/v1/messages',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({
+        model:'claude-sonnet-4-6',
+        max_tokens:1000,
+        system:'Você é NOVA, uma assistente de voz pessoal, brasileira, direta e calorosa. Responda em português do Brasil, de forma natural e curta (2-4 frases), como numa conversa falada, sem listas nem markdown, já que a resposta será lida em voz alta.',
+        messages: history
+      })
+    });
+    const data = await res.json();
+    const reply = (data.content||[]).map(c=>c.text||'').join(' ').trim() || 'Não consegui pensar em uma resposta agora.';
+    history.push({role:'assistant', content:reply});
+    addBubble(reply, 'ai');
+    speak(reply);
+  }catch(e){
+    addBubble('Tive um problema para responder agora. Tenta de novo.', 'ai');
+    setState('idle');
+  }
+}
+
+// ---------- TEXT TO SPEECH ----------
+function speak(text){
+  setState('speaking');
+  window.speechSynthesis.cancel();
+  const u = new SpeechSynthesisUtterance(text);
+  u.lang = 'pt-BR';
+  u.rate = 1.02;
+  const voices = window.speechSynthesis.getVoices();
+  const ptVoice = voices.find(v=>v.lang && v.lang.toLowerCase().startsWith('pt'));
+  if(ptVoice) u.voice = ptVoice;
+  u.onend = ()=> setState('idle');
+  window.speechSynthesis.speak(u);
+}
+
+// ---------- SPEECH TO TEXT ----------
+const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+let recognition = null;
+if(SR){
+  recognition = new SR();
+  recognition.lang = 'pt-BR';
+  recognition.interimResults = false;
+  recognition.maxAlternatives = 1;
+  recognition.onstart = ()=> setState('listening');
+  recognition.onresult = (e)=>{
+    const said = e.results[0][0].transcript;
+    addBubble(said, 'user');
+    askNova(said);
+  };
+  recognition.onerror = ()=> setState('idle');
+  recognition.onend = ()=>{ if(state==='listening') setState('idle'); };
+}else{
+  document.getElementById('status').textContent = 'seu navegador não suporta voz — use o texto abaixo';
+}
+
+document.getElementById('micBtn').addEventListener('click', ()=>{
+  if(!recognition){ document.getElementById('textInput').focus(); return; }
+  if(state==='listening'){ recognition.stop(); return; }
+  window.speechSynthesis.cancel();
+  try{ recognition.start(); }catch(e){}
+});
+
+document.getElementById('textInput').addEventListener('keydown', (e)=>{
+  if(e.key==='Enter' && e.target.value.trim()){
+    const val = e.target.value.trim();
+    e.target.value='';
+    addBubble(val,'user');
+    askNova(val);
+  }
+});
+</script>
+</body>
+</html>
