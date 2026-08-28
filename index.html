@@ -3,6 +3,14 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="theme-color" content="#050810">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="NOVA IA">
+<link rel="manifest" href="./manifest.webmanifest">
+<link rel="icon" href="./icon-192.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="./icon-192.svg">
 <title>NOVA — Assistente IA</title>
 <style>
   :root{
@@ -127,14 +135,12 @@ function draw(){
   const speed = state==='thinking'?2.2:1;
   const col = colors[state];
 
-  // glow
   const glow = ctx.createRadialGradient(cx,cy,baseR*0.2,cx,cy,baseR*2.2);
   glow.addColorStop(0, col+'55');
   glow.addColorStop(1, 'transparent');
   ctx.fillStyle = glow;
   ctx.beginPath(); ctx.arc(cx,cy,baseR*2.2,0,7); ctx.fill();
 
-  // rings of dots forming sphere wireframe
   const rings = 14;
   for(let i=0;i<rings;i++){
     const phase = (i/rings)*Math.PI;
@@ -155,7 +161,6 @@ function draw(){
     ctx.stroke();
   }
 
-  // core
   const core = ctx.createRadialGradient(cx,cy,0,cx,cy,baseR*0.55);
   core.addColorStop(0, col+'ee');
   core.addColorStop(1, col+'11');
@@ -176,10 +181,9 @@ function setState(s){
   statusEl.classList.toggle('on', s!=='idle');
 }
 
-// ---------- CHAT LOG ----------
 const log = document.getElementById('log');
 const emptyMsg = document.getElementById('emptyMsg');
-const history = []; // {role, content}
+const history = [];
 
 function addBubble(text, who){
   emptyMsg.style.display = 'none';
@@ -190,7 +194,6 @@ function addBubble(text, who){
   log.scrollTop = log.scrollHeight;
 }
 
-// ---------- CLAUDE CALL ----------
 async function askNova(userText){
   history.push({role:'user', content:userText});
   setState('thinking');
@@ -216,7 +219,6 @@ async function askNova(userText){
   }
 }
 
-// ---------- TEXT TO SPEECH ----------
 function speak(text){
   setState('speaking');
   window.speechSynthesis.cancel();
@@ -230,7 +232,6 @@ function speak(text){
   window.speechSynthesis.speak(u);
 }
 
-// ---------- SPEECH TO TEXT ----------
 const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
 let recognition = null;
 if(SR){
@@ -265,6 +266,12 @@ document.getElementById('textInput').addEventListener('keydown', (e)=>{
     askNova(val);
   }
 });
+
+if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('./sw.js').catch(err => console.warn('Falha ao registrar PWA:', err));
+  });
+}
 </script>
 </body>
 </html>
