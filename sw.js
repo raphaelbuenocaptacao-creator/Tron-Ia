@@ -1,4 +1,4 @@
-const CACHE_NAME = 'nova-ia-shell-v3-safe';
+const CACHE_NAME = 'nova-ia-shell-v4-safe';
 const STATIC_ASSETS = [
   './',
   './index.html',
@@ -10,7 +10,7 @@ const STATIC_ASSETS = [
 
 const PRIVATE_PATH_RE = /\/(api|auth|login|logout|admin|session|sessions|token|tokens|password|account|profile|me)(\/|$)/i;
 const SENSITIVE_QUERY_KEYS = new Set([
-  'token','access_token','refresh_token','password','secret','session','auth',
+  'token','access_token','refresh_token','password','passwd','secret','session','auth',
   'authorization','api_key','apikey','key','code','credential','credentials'
 ]);
 
