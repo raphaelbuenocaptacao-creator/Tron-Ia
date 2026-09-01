@@ -1,4 +1,5 @@
-const CACHE_NAME = 'nova-ia-shell-v5-safe';
+const CACHE_PREFIX = 'nova-ia-shell-';
+const CACHE_NAME = `${CACHE_PREFIX}v6-safe`;
 const STATIC_ASSETS = [
   './',
   './index.html',
@@ -61,7 +62,7 @@ self.addEventListener('install', event => {
 self.addEventListener('activate', event => {
   event.waitUntil((async () => {
     const keys = await caches.keys();
-    await Promise.all(keys.filter(key => key !== CACHE_NAME).map(key => caches.delete(key)));
+    await Promise.all(keys.filter(key => key.startsWith(CACHE_PREFIX) && key !== CACHE_NAME).map(key => caches.delete(key)));
     await self.clients.claim();
   })());
 });
