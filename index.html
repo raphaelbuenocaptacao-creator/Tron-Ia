@@ -110,7 +110,6 @@
   </div>
 
 <script>
-// ---------- ORB VISUAL ----------
 const canvas = document.getElementById('orb');
 const ctx = canvas.getContext('2d');
 let dpr = Math.min(window.devicePixelRatio||1, 2);
@@ -121,7 +120,7 @@ function resize(){
 window.addEventListener('resize', resize);
 resize();
 
-let state = 'idle'; // idle | listening | thinking | speaking
+let state = 'idle';
 let t = 0;
 const colors = { idle:'#4FE8C6', listening:'#FF7A59', thinking:'#8B7CFF', speaking:'#4FE8C6' };
 
@@ -267,9 +266,35 @@ document.getElementById('textInput').addEventListener('keydown', (e)=>{
   }
 });
 
+let deferredInstallPrompt = null;
+window.addEventListener('beforeinstallprompt', event => {
+  event.preventDefault();
+  deferredInstallPrompt = event;
+});
+window.addEventListener('appinstalled', () => {
+  deferredInstallPrompt = null;
+});
+window.NovaPWA = {
+  async install(){
+    if(!deferredInstallPrompt) return false;
+    await deferredInstallPrompt.prompt();
+    const choice = await deferredInstallPrompt.userChoice;
+    if(choice && choice.outcome === 'accepted') deferredInstallPrompt = null;
+    return choice && choice.outcome === 'accepted';
+  }
+};
+
 if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')) {
-  window.addEventListener('load', () => {
-    navigator.serviceWorker.register('./sw.js').catch(err => console.warn('Falha ao registrar PWA:', err));
+  window.addEventListener('load', async () => {
+    try {
+      const registration = await navigator.serviceWorker.register('./sw.js', {
+        scope: './',
+        updateViaCache: 'none'
+      });
+      await registration.update();
+    } catch (err) {
+      console.warn('Falha ao registrar PWA:', err);
+    }
   });
 }
 </script>
