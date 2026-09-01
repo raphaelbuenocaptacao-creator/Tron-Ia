@@ -1,4 +1,4 @@
-const CACHE_NAME = 'nova-ia-shell-v4-safe';
+const CACHE_NAME = 'nova-ia-shell-v5-safe';
 const STATIC_ASSETS = [
   './',
   './index.html',
@@ -8,6 +8,7 @@ const STATIC_ASSETS = [
   './icon-512-maskable.svg'
 ];
 
+const SHELL_PATHS = new Set(STATIC_ASSETS.map(asset => new URL(asset, self.location.href).pathname));
 const PRIVATE_PATH_RE = /\/(api|auth|login|logout|admin|session|sessions|token|tokens|password|account|profile|me)(\/|$)/i;
 const SENSITIVE_QUERY_KEYS = new Set([
   'token','access_token','refresh_token','password','passwd','secret','session','auth',
@@ -29,22 +30,40 @@ function isPrivateRequest(request, url) {
   return PRIVATE_PATH_RE.test(url.pathname);
 }
 
+function isCacheableResponse(response) {
+  if (!response || !response.ok || response.type !== 'basic') return false;
+  const cacheControl = (response.headers.get('cache-control') || '').toLowerCase();
+  if (cacheControl.includes('private') || cacheControl.includes('no-store')) return false;
+  if (response.headers.has('set-cookie')) return false;
+  return true;
+}
+
 function isShellAsset(url) {
-  if (url.search) return false;
-  const path = `.${url.pathname}`;
-  return STATIC_ASSETS.some(asset => asset === path || (asset === './' && url.pathname.endsWith('/')));
+  return !url.search && SHELL_PATHS.has(url.pathname);
 }
 
 self.addEventListener('install', event => {
-  self.skipWaiting();
-  event.waitUntil(caches.open(CACHE_NAME).then(cache => cache.addAll(STATIC_ASSETS)));
+  event.waitUntil((async () => {
+    const cache = await caches.open(CACHE_NAME);
+    for (const asset of STATIC_ASSETS) {
+      try {
+        const request = new Request(asset, { cache: 'reload', credentials: 'omit' });
+        const response = await fetch(request);
+        if (isCacheableResponse(response)) await cache.put(request, response.clone());
+      } catch (error) {
+        console.warn('[NOVA PWA] precache skipped:', asset, error);
+      }
+    }
+    await self.skipWaiting();
+  })());
 });
 
 self.addEventListener('activate', event => {
-  event.waitUntil(Promise.all([
-    caches.keys().then(keys => Promise.all(keys.filter(key => key !== CACHE_NAME).map(key => caches.delete(key)))),
-    self.clients.claim()
-  ]));
+  event.waitUntil((async () => {
+    const keys = await caches.keys();
+    await Promise.all(keys.filter(key => key !== CACHE_NAME).map(key => caches.delete(key)));
+    await self.clients.claim();
+  })());
 });
 
 self.addEventListener('fetch', event => {
@@ -53,21 +72,26 @@ self.addEventListener('fetch', event => {
   if (isPrivateRequest(request, url)) return;
 
   if (request.mode === 'navigate') {
-    event.respondWith(
-      fetch(request, { cache: 'no-store' }).catch(() => caches.match('./index.html').then(hit => hit || caches.match('./')))
-    );
+    event.respondWith((async () => {
+      try {
+        return await fetch(request, { cache: 'no-store' });
+      } catch {
+        return (await caches.match('./index.html')) || (await caches.match('./')) || Response.error();
+      }
+    })());
     return;
   }
 
   if (!isShellAsset(url)) return;
 
-  event.respondWith(
-    caches.match(request).then(hit => hit || fetch(request, { cache: 'no-cache' }).then(response => {
-      if (response && response.ok && response.type === 'basic') {
-        const copy = response.clone();
-        caches.open(CACHE_NAME).then(cache => cache.put(request, copy));
-      }
-      return response;
-    }))
-  );
+  event.respondWith((async () => {
+    const cached = await caches.match(request);
+    if (cached) return cached;
+    const response = await fetch(request, { cache: 'no-store' });
+    if (isCacheableResponse(response)) {
+      const cache = await caches.open(CACHE_NAME);
+      await cache.put(request, response.clone());
+    }
+    return response;
+  })());
 });
