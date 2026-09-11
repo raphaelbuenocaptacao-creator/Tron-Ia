@@ -1,0 +1,45 @@
+name: TRON IA PWA Audit
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  pwa-audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate required PWA files
+        run: |
+          test -f index.html
+          test -f manifest.webmanifest
+          test -f sw.js
+          test -f icon-192.png
+          test -f icon-512.png
+          test -f icon-512-maskable.png
+      - name: Validate manifest essentials
+        run: |
+          grep -q '"display"[[:space:]]*:[[:space:]]*"standalone"' manifest.webmanifest
+          grep -q '"start_url"' manifest.webmanifest
+          grep -q '"theme_color"' manifest.webmanifest
+          grep -q '"192x192"' manifest.webmanifest
+          grep -q '"512x512"' manifest.webmanifest
+          grep -q 'maskable' manifest.webmanifest
+      - name: Validate service worker privacy and range safety
+        run: |
+          grep -qi "authorization" sw.js
+          grep -qi "cookie" sw.js
+          grep -qi "if-range" sw.js
+          grep -qi "content-range" sw.js
+          grep -qi "no-store" sw.js
+          grep -Eqi "vary.*range|value === 'range'" sw.js
+          grep -Eqi "vary.*if-range|value === 'if-range'" sw.js
+          grep -q "startsWith(CACHE_PREFIX)" sw.js
+      - name: Validate service worker registration
+        run: |
+          grep -q "serviceWorker" index.html
+          grep -q "sw.js" index.html
