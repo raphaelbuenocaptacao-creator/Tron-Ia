@@ -1,5 +1,5 @@
 const CACHE_PREFIX = 'nova-ia-shell-';
-const CACHE_NAME = `${CACHE_PREFIX}v8-private-vary-safe`;
+const CACHE_NAME = `${CACHE_PREFIX}v9-range-vary-safe`;
 const STATIC_ASSETS = [
   './',
   './index.html',
@@ -35,7 +35,13 @@ function isPrivateRequest(request, url) {
 function hasSensitiveVary(response) {
   const vary = (response.headers.get('vary') || '').toLowerCase();
   if (!vary) return false;
-  return vary.split(',').map(value => value.trim()).some(value => value === 'cookie' || value === 'authorization' || value === '*');
+  return vary.split(',').map(value => value.trim()).some(value =>
+    value === 'cookie' ||
+    value === 'authorization' ||
+    value === 'range' ||
+    value === 'if-range' ||
+    value === '*'
+  );
 }
 
 function isCacheableResponse(response) {
