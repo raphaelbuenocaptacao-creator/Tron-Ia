@@ -42,4 +42,9 @@ jobs:
       - name: Validate service worker registration
         run: |
           grep -q "serviceWorker" index.html
-          grep -q "sw.js" index.html
+          grep -q "updateViaCache: 'none'" index.html
+      - name: Validate service worker version alignment
+        run: |
+          VERSION=$(sed -n "s/.*CACHE_NAME = .*\(v[0-9][^'\"\`$}]*\).*/\1/p" sw.js | head -n1)
+          test -n "$VERSION"
+          grep -q "sw.js?v=$VERSION" index.html
