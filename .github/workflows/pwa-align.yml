@@ -1,0 +1,46 @@
+name: TRON IA PWA Align
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - sw.js
+      - index.html
+      - .github/workflows/pwa-align.yml
+
+permissions:
+  contents: write
+
+jobs:
+  align-service-worker-version:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Align registration with cache version
+        shell: bash
+        run: |
+          set -euo pipefail
+          VERSION=$(sed -n "s/.*CACHE_NAME = .*\(v[0-9][^'\"\`$}]*\).*/\1/p" sw.js | head -n1)
+          test -n "$VERSION"
+          python - "$VERSION" <<'PY'
+          from pathlib import Path
+          import re, sys
+          version = sys.argv[1]
+          path = Path('index.html')
+          text = path.read_text()
+          updated, count = re.subn(r"navigator\.serviceWorker\.register\('./sw\.js(?:\?v=[^']*)?'", f"navigator.serviceWorker.register('./sw.js?v={version}'", text, count=1)
+          if count != 1:
+              raise SystemExit('service worker registration not found')
+          path.write_text(updated)
+          PY
+      - name: Commit alignment when needed
+        run: |
+          if git diff --quiet -- index.html; then
+            echo "Registration already aligned"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add index.html
+          git commit -m "fix(pwa): align service worker registration with cache version"
+          git push
