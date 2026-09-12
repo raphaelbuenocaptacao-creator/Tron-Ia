@@ -48,3 +48,4 @@ jobs:
           VERSION=$(sed -n "s/.*CACHE_NAME = .*\(v[0-9][^'\"\`$}]*\).*/\1/p" sw.js | head -n1)
           test -n "$VERSION"
           grep -q "sw.js?v=$VERSION" index.html
+      # Keep this workflow push-triggered so automated alignment is verified by a fresh human-authored commit.
