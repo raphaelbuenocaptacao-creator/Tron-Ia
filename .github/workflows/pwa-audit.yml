@@ -3,6 +3,8 @@ name: TRON IA PWA Audit
 on:
   push:
     branches: [main]
+  pull_request:
+    branches: [main]
   workflow_dispatch:
 
 permissions:
@@ -39,13 +41,27 @@ jobs:
           grep -Eqi "vary.*range|value === 'range'" sw.js
           grep -Eqi "vary.*if-range|value === 'if-range'" sw.js
           grep -q "startsWith(CACHE_PREFIX)" sw.js
+      - name: Validate mobile install metadata
+        run: |
+          grep -q 'name="viewport"' index.html
+          grep -q 'name="theme-color"' index.html
+          grep -q 'name="mobile-web-app-capable"' index.html
+          grep -q 'name="apple-mobile-web-app-capable"' index.html
+          grep -q 'rel="manifest"' index.html
       - name: Validate service worker registration
         run: |
           grep -q "serviceWorker" index.html
           grep -q "updateViaCache: 'none'" index.html
+          grep -q "location.protocol === 'https:'" index.html
+          grep -q "location.hostname === 'localhost'" index.html
+      - name: Validate service worker refresh on resume
+        run: |
+          grep -q "visibilitychange" index.html
+          grep -q "document.visibilityState === 'visible'" index.html
+          grep -q "registration.update()" index.html
       - name: Validate service worker version alignment
         run: |
           VERSION=$(sed -n "s/.*CACHE_NAME = .*\(v[0-9][^'\"\`$}]*\).*/\1/p" sw.js | head -n1)
           test -n "$VERSION"
           grep -q "sw.js?v=$VERSION" index.html
-      # Keep this workflow push-triggered so automated alignment is verified by a fresh human-authored commit.
+      # Keep this workflow push-triggered and PR-triggered so PWA regressions fail before merge.
